@@ -28,7 +28,7 @@ jobs:
       run: |
        cd minichlink
        make clean
-       LDFLAGS=-static make V=1 -j3
+       make V=1 -j3
     - name: Build (Mac 13 Intel)
       if: ${{  matrix.os == 'macos-13' }}
       run: |

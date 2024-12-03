@@ -9,12 +9,14 @@ C_S:=minichlink.c pgm-wch-linke.c pgm-esp32s2-ch32xx.c nhc-link042.c ardulink.c 
 
 CFLAGS_WINDOWS:=-Os -s -Wall -D_WIN32_WINNT=0x0600 -I. -Wall -DCH32V003
 LDFLAGS_WINDOWS:=-L. -lpthread -lusb-1.0 -lsetupapi -lws2_32
+LDFLAGS_MINICHLINK:=
 ifeq ($(OS),Windows_NT)
 	TOOLS:=minichlink.exe
 else
 	OS_NAME := $(shell uname -s | tr A-Z a-z)
 	ifeq ($(OS_NAME),linux)
 		LDFLAGS:=-lpthread -lusb-1.0 -ludev
+		LDFLAGS_MINICHLINK:=-static
 	endif
 	ifeq ($(OS_NAME),darwin)
 		LDFLAGS:=-lpthread -lusb-1.0 -framework CoreFoundation -framework IOKit
@@ -32,7 +34,7 @@ minichlink.exe : $(C_S)
 	x86_64-w64-mingw32-gcc -o $@ $^ $(LDFLAGS_WINDOWS) $(CFLAGS_WINDOWS)
 
 minichlink : $(C_S)
-	gcc -o $@ $^ $(LDFLAGS) $(CFLAGS) $(INCS)
+	gcc -o $@ $^ $(LDFLAGS) $(LDFLAGS_MINICHLINK) $(CFLAGS) $(INCS)
 
 minichlink.so : $(C_S)
 	gcc -o $@ $^ $(LDFLAGS) $(CFLAGS) $(INCS) -shared -fPIC
