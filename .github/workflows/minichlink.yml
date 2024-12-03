@@ -48,8 +48,7 @@ jobs:
        make clean
        make V=1 -j3
        otool -L ./minichlink
-       echo "Runner OS is: $RUNNER_OS"
-       LIBUSB_PATH="/opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib""
+       LIBUSB_PATH="/opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib"
        echo "LIBUSB PATH Is: $LIBUSB_PATH"
        cp $LIBUSB_PATH .
        install_name_tool -change $LIBUSB_PATH "@executable_path/./libusb-1.0.0.dylib" ./minichlink
