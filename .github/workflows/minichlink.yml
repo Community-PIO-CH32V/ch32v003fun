@@ -35,10 +35,10 @@ jobs:
        cd minichlink
        make clean
        make V=1 -j3
+       otool -L ./minichlink
        which libusb-1.0.0.dylib || true
        ls -l /opt/homebrew/opt/ || true 
        cp /opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib .
-       otool -L ./minichlink
        install_name_tool -change /opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib "@executable_path/./libusb-1.0.0.dylib" ./minichlink
        otool -L ./minichlink
     # we cross-compile the Windows binaries from Linux 
