@@ -15,7 +15,7 @@ ifeq ($(OS),Windows_NT)
 else
 	OS_NAME := $(shell uname -s | tr A-Z a-z)
 	ifeq ($(OS_NAME),linux)
-		LDFLAGS:=-lpthread -lusb-1.0 -ludev
+		LDFLAGS:=-lpthread -lusb-1.0
 		LDFLAGS_MINICHLINK:=-static
 	endif
 	ifeq ($(OS_NAME),darwin)
