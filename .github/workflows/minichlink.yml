@@ -36,10 +36,10 @@ jobs:
        make clean
        make V=1 -j3
        otool -L ./minichlink
-       which libusb-1.0.0.dylib || true
-       ls -l /opt/homebrew/opt/ || true 
-       cp /opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib .
-       install_name_tool -change /opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib "@executable_path/./libusb-1.0.0.dylib" ./minichlink
+       LIBUSB_PATH=$(if [ "$RUNNER_OS" -eq "macos-13" ] then echo "/usr/local/opt/libusb/lib/libusb-1.0.0.dylib"; else echo "/opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib"; fi)
+       echo "LIBUSB PATH Is: $LIBUSB_PATH"
+       cp $LIBUSB_PATH .
+       install_name_tool -change $LIBUSB_PATH "@executable_path/./libusb-1.0.0.dylib" ./minichlink
        otool -L ./minichlink
     # we cross-compile the Windows binaries from Linux 
     - name: Build (for Windows)
