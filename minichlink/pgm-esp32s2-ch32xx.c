@@ -5,6 +5,14 @@
 #define PROGRAMMER_TYPE_ESP32S2 0
 #define PROGRAMMER_TYPE_CH32V003 1
 
+#define DETAILED_DEBUG 0
+
+#if defined( WIN32 ) || defined( _WIN32 )
+#define WIN32ADD1 1
+#else
+#define WIN32ADD1 0
+#endif
+
 struct ESP32ProgrammerStruct
 {
 	void * internal;
@@ -221,9 +229,10 @@ int ESPFlushLLCommands( void * dev )
 	eps->commandbuffer[0] = 0xad; // Key report ID
 	memset( eps->commandbuffer + eps->commandplace, 0xff, eps->commandbuffersize - eps->commandplace - 1 );
 
-#if 0
+#if DETAILED_DEBUG
 	int i;
-	for( i = 0; i < eps->commandplace; i++ )
+	printf( "CHAL: %d", eps->commandplace );
+	for( i = 0; i < eps->commandplace+1; i++ )
 	{
 		if( ( i & 0xff ) == 0 ) printf( "\n" );
 		printf( "%02x ", eps->commandbuffer[i] );
@@ -231,7 +240,7 @@ int ESPFlushLLCommands( void * dev )
 	printf("\n" );
 #endif
 
-	r = hid_send_feature_report( eps->hd, eps->commandbuffer, eps->commandbuffersize );
+	r = hid_send_feature_report( eps->hd, eps->commandbuffer, eps->commandbuffersize+WIN32ADD1 );
 	eps->commandplace = 1;
 	if( r < 0 )
 	{
@@ -240,14 +249,13 @@ int ESPFlushLLCommands( void * dev )
 	}
 retry:
 	eps->reply[0] = 0xad; // Key report ID
-	r = hid_get_feature_report( eps->hd, eps->reply, eps->replysize );
-#if 0
-	printf( "RESP: %d %d\n", r,eps->reply[0] );
-
+	r = hid_get_feature_report( eps->hd, eps->reply, eps->replysize+WIN32ADD1 );
+#if DETAILED_DEBUG
+	printf( "RESP: %d %d", (int)r, (int)eps->reply[0] );
 	for( int i = 0; i < eps->reply[0]; i++ )
 	{
+		if( (i % 16) == 0 ) printf( "\n" );
 		printf( "%02x ", eps->reply[i+1] );
-		if( (i % 16) == 15 ) printf( "\n" );
 	}
 	printf( "\n" );
 #endif
@@ -256,7 +264,7 @@ retry:
 //printf( ">:::%d: %02x %02x %02x %02x %02x %02x\n", eps->replylen, eps->reply[0], eps->reply[1], eps->reply[2], eps->reply[3], eps->reply[4], eps->reply[5] );
 	if( r < 0 )
 	{
-		fprintf( stderr, "Error: Got error %d when sending hid feature report.\n", r );
+		fprintf( stderr, "Error: Got error %d when getting hid feature report. (Size %d/%d)\n", r, eps->commandbuffersize, eps->replysize );
 		return r;
 	}
 	eps->replylen = eps->reply[0] + 1; // Include the header byte.
@@ -552,6 +560,7 @@ void * TryInit_ESP32S2CHFUN()
 	MCF.VoidHighLevelState = ESPVoidHighLevelState;
 	MCF.VendorCommand = ESPVendorCommand;
 
+#if 1
 	// These are optional. Disabling these is a good mechanismto make sure the core functions still work.
 	// Comment these out to test the reference algorithm.
 	// DO NOT Comment them out piecemeal because there are state assumptions built into these functions.
@@ -563,17 +572,23 @@ void * TryInit_ESP32S2CHFUN()
 	MCF.BlockWrite64 = ESPBlockWrite64;
 	MCF.ReadBinaryBlob = ESPReadBinaryBlob;
 	MCF.ReadAllCPURegisters = ESPReadAllCPURegisters;
+#endif
 
-	// Reset internal programmer state.
-	Write2LE( eps, 0x0afe );
 	ESPFlushLLCommands( eps );
-	Write2LE( eps, 0xfefe );
+
+	// Force programmer mode.
+	Write1( eps, 0xfe );
+	Write1( eps, 0xfd );
+	Write1( eps, 0x00 );
 	ESPFlushLLCommands( eps );
 	if( eps->replylen > 1 )
 	{
 		eps->dev_version = eps->reply[1];
+		printf( "Dev Version: %d\n", eps->dev_version );
 	}
 	Write2LE( eps, 0x0efe ); // Trigger Init.
+	ESPFlushLLCommands( eps );
+	Write2LE( eps, 0x0afe ); 	// Reset programmer internals
 	ESPFlushLLCommands( eps );
 	return eps;
 }

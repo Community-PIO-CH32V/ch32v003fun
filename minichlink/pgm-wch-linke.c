@@ -40,19 +40,58 @@ static void printChipInfo(enum RiscVChip chip) {
 		case CHIP_CH58x:
 			fprintf(stderr, "Detected: CH58x\n");
 			break;
+		case CHIP_CH59x:
+			fprintf(stderr, "Detected: CH59x\n");
+			break;
+		case CHIP_CH643:
+			fprintf(stderr, "Detected: CH643\n");
+			break;
 		case CHIP_CH32X03x:
 			fprintf(stderr, "Detected: CH32X03x\n");
 			break;
+		case CHIP_CH32L10x:
+			fprintf(stderr, "Detected: CH32L10x\n");
+			break;
+		case CHIP_CH564:
+			fprintf(stderr, "Detected: CH564\n");
+			break;
 		case CHIP_CH32V003:
 			fprintf(stderr, "Detected: CH32V003\n");
+			break;
+		case CHIP_CH32V002:
+			fprintf(stderr, "Detected: CH32V002\n");
+			break;
+		case CHIP_CH32V004:
+			fprintf(stderr, "Detected: CH32V004\n");
+			break;
+		case CHIP_CH32V005:
+			fprintf(stderr, "Detected: CH32V005\n");
+			break;
+		case CHIP_CH32V006:
+			fprintf(stderr, "Detected: CH32V006\n");
+			break;
+		case CHIP_CH645:
+			fprintf(stderr, "Detected: CH645\n");
+			break;
+		case CHIP_CH641:
+			fprintf(stderr, "Detected: CH641\n");
+			break;
+		case CHIP_CH32V317:
+			fprintf(stderr, "Detected: CH32V317\n");
 			break;
 	}
 }
 
 static int checkChip(enum RiscVChip chip) {
 	switch(chip) {
+		case CHIP_UNKNOWN:
 		case CHIP_CH32V003:
 		case CHIP_CH32X03x:
+		case CHIP_CH32V002:
+		case CHIP_CH32V004:
+		case CHIP_CH32V006:
+		case CHIP_CH32V005:
+		case CHIP_CH641:
 			return 0; // Use direct mode
 		case CHIP_CH32V10x:
 		case CHIP_CH32V20x:
@@ -353,6 +392,8 @@ static int LESetupInterface( void * d )
 	// My capture differs in this case: \x05 instead of \x09 -> But does not seem to be needed
 	//wch_link_command( dev, "\x81\x0c\x02\x05\x01", 5, 0, 0, 0 ); //Reply is: 820c0101
 
+	int unknown_chip_fallback = 0;
+
 	// This puts the processor on hold to allow the debugger to run.
 	int already_tried_reset = 0;
 	int is_already_connected = 0;
@@ -360,7 +401,12 @@ static int LESetupInterface( void * d )
 	{
 		// Read DMSTATUS - in case we are a ch32x035, or other chip that does not respond to \x81\x0d\x01\x02.
 		wch_link_command( dev, "\x81\x08\x06\x05\x11\x00\x00\x00\x00\x01", 11, (int*)&transferred, rbuff, 1024 ); // Reply: Ignored, 820d050900300500
-		if( transferred == 9 && rbuff[8] != 0x02 && rbuff[8] != 0x03 && rbuff[8] != 0x00 )
+
+		// There's a couple situations where the older firmware on the official programmer freaks out.
+		// We don't want to inconvenience our users, so just try to work through it by falling back to the minichlink functions.
+		// Part connected.  But the programmer doesn't know what it is.
+		if( transferred == 9 && ( ( rbuff[4] == 0x00 ) || 
+			( rbuff[8] != 0x02 && rbuff[8] != 0x03 && rbuff[8] != 0x00 ) ) )
 		{
 			// Already connected.
 			if( is_already_connected )
@@ -368,6 +414,7 @@ static int LESetupInterface( void * d )
 				printf( "Already Connected\n" );
 				// Still need to read in the data so we can select the correct chip.
 				wch_link_command( dev, "\x81\x0d\x01\x02", 4, (int*)&transferred, rbuff, 1024 ); // ?? this seems to work?
+				unknown_chip_fallback = 1;
 				break;
 			}
 			is_already_connected = 1;
@@ -382,8 +429,11 @@ static int LESetupInterface( void * d )
 				fprintf(stderr, "link error, nothing connected to linker (%d = [%02x %02x %02x %02x]).  Trying to put processor in hold and retrying.\n", transferred, rbuff[0], rbuff[1], rbuff[2], rbuff[3]);
 
 			// Give up if too long
-			if( already_tried_reset > 10 )
-				return -1;
+			if( already_tried_reset > 5 )
+			{
+				unknown_chip_fallback = 1;
+				break;
+			}
 
 			wch_link_multicommands( (libusb_device_handle *)dev, 1, 4, "\x81\x0d\x01\x13" ); // Try forcing reset line low.
 			wch_link_command( (libusb_device_handle *)dev, "\x81\x0d\x01\xff", 4, 0, 0, 0); //Exit programming
@@ -411,9 +461,21 @@ static int LESetupInterface( void * d )
 	printf( "Full Chip Type Reply: [%d] %02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x\n", transferred, rbuff[0], rbuff[1], rbuff[2], rbuff[3], rbuff[4], rbuff[5], rbuff[6], rbuff[7], rbuff[8] );
 
 	enum RiscVChip chip = (enum RiscVChip)rbuff[3];
-	if( ( chip == 0x08 || chip > 0x09 ) && chip != CHIP_CH32X03x ) {
+	if( chip == 0x4e )
+	{
+		// It's one of the 00x's.  AND we're on a new programmer, so no need to unknown' it.
+		chip = CHIP_CH32V006;
+	}
+	else if( ( chip == 0x04 || chip == 0x08 || chip == 0x0a || chip > 0x0f )
+		&& chip != CHIP_CH645  && chip != CHIP_CH641 && chip != CHIP_CH32V317 ) {
 		fprintf( stderr, "Chip Type unknown [%02x]. Aborting...\n", chip );
 		return -1;
+	}
+
+	if( unknown_chip_fallback )
+	{
+		printf( "Unknown chip fallback\n" );
+		chip = CHIP_UNKNOWN;
 	}
 
 	printChipInfo(chip);
@@ -451,69 +513,78 @@ retry_DoneOp:
 	// Recommended to switch to 05 from 09 by Alexander M
 	//	wch_link_command( dev, "\x81\x11\x01\x09", 4, (int*)&transferred, rbuff, 1024 ); // Reply: Chip ID + Other data (see below)
 
+	if( unknown_chip_fallback )
+	{
+		// This is a little cursed.  If we're in fallback mode, none of the other chip-specific operations will work
+		// the processor will be in a very cursed mode.  We can't trust it.
+		MCF.HaltMode( d, HALT_MODE_REBOOT );
+	}
+	else
+	{
 retry_ID:
-	wch_link_command( dev, "\x81\x11\x01\x05", 4, (int*)&transferred, rbuff, 1024 ); // Reply: Chip ID + Other data (see below)
+		wch_link_command( dev, "\x81\x11\x01\x05", 4, (int*)&transferred, rbuff, 1024 ); // Reply: Chip ID + Other data (see below)
 
-	if( rbuff[0] == 0x00 )
-	{
-		if( timeout++ < 10 ) goto retry_ID;
-		fprintf( stderr, "Failed to get chip ID\n" );
-		return -4;
+		if( rbuff[0] == 0x00 )
+		{
+			if( timeout++ < 10 ) goto retry_ID;
+			fprintf( stderr, "Failed to get chip ID\n" );
+			return -4;
+		}
+
+		if( transferred != 20 )
+		{
+			fprintf( stderr, "Error: could not get part status\n" );
+			return -1;
+		}
+		int flash_size = (rbuff[2]<<8) | rbuff[3];
+		fprintf( stderr, "Flash Storage: %d kB\n", flash_size );
+		fprintf( stderr, "Part UUID    : %02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x\n", rbuff[4], rbuff[5], rbuff[6], rbuff[7], rbuff[8], rbuff[9], rbuff[10], rbuff[11] );
+		fprintf( stderr, "PFlags       : %02x-%02x-%02x-%02x\n", rbuff[12], rbuff[13], rbuff[14], rbuff[15] );
+		fprintf( stderr, "Part Type (B): %02x-%02x-%02x-%02x\n", rbuff[16], rbuff[17], rbuff[18], rbuff[19] );
+
+		// Quirk, was fixed in LinkE version 2.12.
+		if( iss->target_chip_type == CHIP_CH32V10x && flash_size == 62 )
+		{
+			fprintf( stderr, "While the debugger reports this as a CH32V10x, it's probably a CH32X03x\n" );
+			chip = iss->target_chip_type = CHIP_CH32X03x;
+		}
+
+		if( iss->target_chip_type == CHIP_CH32X03x )
+		{
+			iss->sector_size = 256;
+		}
+
+		int result = checkChip(chip);
+		if( result == 1 ) // Using blob write
+		{
+			fprintf( stderr, "Using binary blob write for operation.\n" );
+			MCF.WriteBinaryBlob = LEWriteBinaryBlob;
+
+			iss->sector_size = 256;
+
+			wch_link_command( dev, "\x81\x0d\x01\x03", 4, (int*)&transferred, rbuff, 1024 ); // Reply: Ignored, 820d050900300500
+
+		} else if( result < 0 ) {
+			fprintf( stderr, "Chip type not supported. Aborting...\n" );
+			return -1;
+		}
+
+
+		// Check for read protection
+		wch_link_command( dev, "\x81\x06\x01\x01", 4, (int*)&transferred, rbuff, 1024 );
+		if(transferred != 4) {
+			fprintf(stderr, "Error: could not get read protection status\n");
+			return -1;
+		}
+
+		if(rbuff[3] == 0x01) {
+			fprintf(stderr, "Read protection: enabled\n");
+		} else {
+			fprintf(stderr, "Read protection: disabled\n");
+		}
+
+		iss->flash_size = flash_size*1024;
 	}
-
-	if( transferred != 20 )
-	{
-		fprintf( stderr, "Error: could not get part status\n" );
-		return -1;
-	}
-	int flash_size = (rbuff[2]<<8) | rbuff[3];
-	fprintf( stderr, "Flash Storage: %d kB\n", flash_size );
-	fprintf( stderr, "Part UUID    : %02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x\n", rbuff[4], rbuff[5], rbuff[6], rbuff[7], rbuff[8], rbuff[9], rbuff[10], rbuff[11] );
-	fprintf( stderr, "PFlags       : %02x-%02x-%02x-%02x\n", rbuff[12], rbuff[13], rbuff[14], rbuff[15] );
-	fprintf( stderr, "Part Type (B): %02x-%02x-%02x-%02x\n", rbuff[16], rbuff[17], rbuff[18], rbuff[19] );
-
-	// Quirk, was fixed in LinkE version 2.12.
-	if( iss->target_chip_type == CHIP_CH32V10x && flash_size == 62 )
-	{
-		fprintf( stderr, "While the debugger reports this as a CH32V10x, it's probably a CH32X03x\n" );
-		chip = iss->target_chip_type = CHIP_CH32X03x;
-	}
-
-	if( iss->target_chip_type == CHIP_CH32X03x )
-	{
-		iss->sector_size = 256;
-	}
-
-	int result = checkChip(chip);
-	if( result == 1 ) // Using blob write
-	{
-		fprintf( stderr, "Using binary blob write for operation.\n" );
-		MCF.WriteBinaryBlob = LEWriteBinaryBlob;
-
-		iss->sector_size = 256;
-
-		wch_link_command( dev, "\x81\x0d\x01\x03", 4, (int*)&transferred, rbuff, 1024 ); // Reply: Ignored, 820d050900300500
-
-	} else if( result < 0 ) {
-		fprintf( stderr, "Chip type not supported. Aborting...\n" );
-		return -1;
-	}
-
-
-	// Check for read protection
-	wch_link_command( dev, "\x81\x06\x01\x01", 4, (int*)&transferred, rbuff, 1024 );
-	if(transferred != 4) {
-		fprintf(stderr, "Error: could not get read protection status\n");
-		return -1;
-	}
-
-	if(rbuff[3] == 0x01) {
-		fprintf(stderr, "Read protection: enabled\n");
-	} else {
-		fprintf(stderr, "Read protection: disabled\n");
-	}
-
-	iss->flash_size = flash_size*1024;
 
 	return 0;
 }

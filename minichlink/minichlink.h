@@ -88,7 +88,7 @@ struct MiniChlinkFunctions
 	FlushLLCommands
 */
 
-inline static int IsAddressFlash( uint32_t addy ) { return ( addy & 0xff000000 ) == 0x08000000 || ( addy & 0x1FFFF000 ) == 0x1FFFF000; }
+inline static int IsAddressFlash( uint32_t addy ) { return ( addy & 0xff000000 ) == 0x08000000 || ( addy & 0x1FFF0000 ) == 0x1FFF0000; }
 
 #define HALT_MODE_HALT_AND_RESET    0
 #define HALT_MODE_REBOOT            1
@@ -118,7 +118,21 @@ enum RiscVChip {
 	CHIP_CH32V30x = 0x06,
 	CHIP_CH58x = 0x07,
 	CHIP_CH32V003 = 0x09,
+	CHIP_CH59x = 0x0b,
+	CHIP_CH643 = 0x0c,
 	CHIP_CH32X03x = 0x0d,
+	CHIP_CH32L10x = 0x0e,
+	CHIP_CH564 = 0x0f,
+
+
+	CHIP_CH32V002 = 0x22,
+	CHIP_CH32V004 = 0x24,
+	CHIP_CH32V005 = 0x25,
+	CHIP_CH32V006 = 0x26,
+
+	CHIP_CH645 = 0x46,
+	CHIP_CH641 = 0x49,
+	CHIP_CH32V317 = 0x86,
 };
 
 enum RAMSplit {
@@ -188,6 +202,27 @@ struct InternalState
 #else
 	#define DLLDECORATE
 #endif
+
+#ifndef TERMINAL_INPUT_BUFFER
+#define TERMINAL_INPUT_BUFFER 0
+#endif
+
+#define TERMINAL_BUFFER_SIZE 512
+
+#define STR_(x) #x
+#define STR(x) STR_(x)
+
+#ifndef TERMINAL_ACCENT_COLOR
+#define TERMINAL_ACCENT_COLOR 5;208 // Chose color from predefined palette
+// #define TERMINAL_ACCENT_COLOR 2;180;11;64  // Use R;G;B for color (can't be dimmed though)
+#endif
+
+#define TERMIANL_INPUT_SENT "\x1b[1F\x1b[2K\x1b[2K\033[38;" STR(TERMINAL_ACCENT_COLOR) "m> "
+#define TERMINAL_SEND_LABEL "\n\x1b[2K\033[7m\033[1m\033[38;" STR(TERMINAL_ACCENT_COLOR) "mSend:\x1b[0m "
+#define TERMINAL_SEND_BUSY "\n\x1b[2K\033[7m\033[1m\033[2m\033[38;" STR(TERMINAL_ACCENT_COLOR) "mSend:\x1b[0m "
+#define TERMINAL_CLEAR_PREV "\x1b[1F\x1b[2K"
+#define TERMINAL_CLEAR_CUR "\x1b[2K\x1b[F"
+#define TERMINAL_DIM "\x1b[2m"
 
 /* initialization hints for init functions */
 /* could be expanded with more in the future (e.g., PID/VID hints, priorities, ...)*/
